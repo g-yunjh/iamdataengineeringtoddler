@@ -1,0 +1,19 @@
+# Ignore logs
+logs/
+*.log
+
+# Common OS files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+env/
+
+# Environment files
+.env
+
+# Node
+node_modules/
