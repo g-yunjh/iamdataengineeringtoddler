@@ -17,3 +17,8 @@ env/
 
 # Node
 node_modules/
+
+# dbt
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
