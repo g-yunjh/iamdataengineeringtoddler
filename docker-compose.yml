@@ -1,21 +1,18 @@
 version: '3.8'
 
 services:
-  ##################################################
-  # 1. PostgreSQL (Airflow 백엔드 + 데이터 웨어하우스)
-  ##################################################
+  # 1. Postgres
   postgres:
     image: postgres:13
     container_name: de_project_postgres
     environment:
       - POSTGRES_USER=airflow
       - POSTGRES_PASSWORD=airflow
-      - POSTGRES_DB=airflow_db  # Airflow 메타데이터용 DB
+      - POSTGRES_DB=airflow_db
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # 🌟 루트의 postgres/init-db.sh를 연결합니다.
       - ./postgres/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U airflow -d airflow_db"]
@@ -23,11 +20,9 @@ services:
       timeout: 5s
       retries: 5
 
-  ##################################################
-  # 2. Airflow (LocalExecutor 사용)
-  ##################################################
+  # 2. Airflow Init
   airflow-init:
-    image: apache/airflow:2.8.1
+    build: .
     container_name: de_project_airflow_init
     depends_on:
       postgres:
@@ -35,7 +30,8 @@ services:
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow_db
-      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      # 🌟 [추가] 비밀키 설정 (403 에러 해결)
+      - AIRFLOW__WEBSERVER__SECRET_KEY=my_secret_key
     command:
       - bash
       - -c
@@ -49,8 +45,9 @@ services:
           --role Admin \
           --email admin@example.org
 
+  # 3. Airflow Webserver
   airflow-webserver:
-    image: apache/airflow:2.8.1
+    build: .
     container_name: de_project_airflow_webserver
     depends_on:
       airflow-init:
@@ -58,18 +55,18 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      # 🌟 루트 폴더 기준으로 각 폴더를 연결합니다.
       - ./dags:/opt/airflow/dags
       - ./data:/opt/airflow/data
       - ./dbt:/opt/airflow/dbt
       - ./scripts:/opt/airflow/scripts
+      # 🌟 [복구] 로그 폴더 연결! (이제 파일이 보일 겁니다)
       - ./logs:/opt/airflow/logs
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow_db
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
-      # 🌟 2단계, 3단계에 필요한 라이브러리를 미리 설치합니다.
-      - _PIP_ADDITIONAL_REQUIREMENTS=apache-airflow-providers-postgres dbt-postgres pandas
+      # 🌟 [추가] 비밀키 설정
+      - AIRFLOW__WEBSERVER__SECRET_KEY=my_secret_key
     command: webserver
     healthcheck:
       test: ["CMD-SHELL", "curl --fail http://localhost:8080/health"]
@@ -77,25 +74,50 @@ services:
       timeout: 10s
       retries: 5
 
+  # 4. Airflow Scheduler
   airflow-scheduler:
-    image: apache/airflow:2.8.1
+    build: .
     container_name: de_project_airflow_scheduler
     depends_on:
       airflow-init:
         condition: service_completed_successfully
     volumes:
-      # 🌟 루트 폴더 기준으로 각 폴더를 연결합니다.
       - ./dags:/opt/airflow/dags
       - ./data:/opt/airflow/data
       - ./dbt:/opt/airflow/dbt
       - ./scripts:/opt/airflow/scripts
+      # 🌟 [복구] 로그 폴더 연결!
       - ./logs:/opt/airflow/logs
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow_db
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
-      - _PIP_ADDITIONAL_REQUIREMENTS=apache-airflow-providers-postgres dbt-postgres pandas
+      # 🌟 [추가] 비밀키 설정
+      - AIRFLOW__WEBSERVER__SECRET_KEY=my_secret_key
     command: scheduler
+
+  # 5. Spark Master
+  spark-master:
+    image: apache/spark:3.5.1-scala2.12-java17-python3-ubuntu
+    container_name: de_project_spark_master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    ports:
+      - "8081:8080"
+      - "7077:7077"
+    volumes:
+      - ./scripts:/opt/spark/work-dir/scripts
+      - ./data:/opt/spark/work-dir/data
+
+  # 6. Spark Worker
+  spark-worker:
+    image: apache/spark:3.5.1-scala2.12-java17-python3-ubuntu
+    container_name: de_project_spark_worker
+    depends_on:
+      - spark-master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    volumes:
+      - ./scripts:/opt/spark/work-dir/scripts
+      - ./data:/opt/spark/work-dir/data
 
 volumes:
   postgres_data:
