@@ -8,7 +8,7 @@ spark = (
     .getOrCreate()
 )
 
-csv_file_path = "file:///opt/spark/work-dir/data/patient_treatment.csv"
+csv_file_path = "/opt/spark/work-dir/data/patient_treatment.csv"
 
 # 🌟 [수정] DB 주소도 서비스 이름(postgres)으로 변경
 db_url = "jdbc:postgresql://de_project_postgres:5432/analytics_db"
