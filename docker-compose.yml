@@ -121,5 +121,31 @@ services:
       - ./scripts:/opt/spark/work-dir/scripts
       - ./data:/opt/spark/work-dir/data
 
+  # 7. Zookeeper
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: de_project_zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  # 8. Kafka
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: de_project_kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # 내부 통신용 주소 설정
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      # 단일 노드이므로 복제 계수를 1로 설정 (중요)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
 volumes:
   postgres_data:
